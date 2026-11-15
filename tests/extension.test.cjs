@@ -26,15 +26,31 @@ function area() {
 }
 for (const target of ["firefox", "chrome"]) {
   const directory = path.join(__dirname, "..", target);
-  test(target + ": generated assets and manifest agree", () => {
+  test(target + ": extension folder contains all referenced assets", () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(directory, "manifest.json")),
     );
-    for (const file of fs.readdirSync(path.join(__dirname, "../shared"))) {
-      assert.equal(
-        fs.readFileSync(path.join(directory, file), "utf8"),
-        fs.readFileSync(path.join(__dirname, "../shared", file), "utf8"),
-      );
+    const pending = [
+      manifest.action.default_popup,
+      ...(manifest.background.scripts || []),
+      ...(manifest.background.service_worker ? [manifest.background.service_worker] : []),
+      ...manifest.content_scripts.flatMap((script) => [...script.js, ...script.css]),
+    ];
+    const checked = new Set();
+    while (pending.length) {
+      const file = pending.pop();
+      if (checked.has(file)) continue;
+      checked.add(file);
+      const filename = fs.realpathSync(path.join(directory, file));
+      assert.ok(filename.startsWith(directory + path.sep), `${file} must be inside ${target}/`);
+      assert.ok(fs.statSync(filename).isFile(), `${file} must be a regular file`);
+      const source = fs.readFileSync(filename, "utf8");
+      const references = file.endsWith(".html")
+        ? [...source.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)=["']([^"']+)["']/g)].map((match) => match[1])
+        : [...source.matchAll(/importScripts\(([^)]+)\)/g)].flatMap((match) =>
+            [...match[1].matchAll(/["']([^"']+)["']/g)].map((argument) => argument[1]),
+          );
+      pending.push(...references.map((reference) => path.join(path.dirname(file), reference)));
     }
     assert.deepEqual(manifest.content_scripts[0].js, [
       "compatibility.js",

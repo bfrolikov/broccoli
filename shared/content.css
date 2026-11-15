@@ -1,3 +1,0 @@
-html.ytb-hold video { visibility: hidden !important; }
-.ytb-cover { position:absolute !important; inset:0 !important; z-index:2147483647 !important; background:#141414 !important; color:white !important; display:flex !important; align-items:center !important; justify-content:center !important; flex-direction:column !important; gap:16px !important; font:20px system-ui !important; text-align:center !important; }
-.ytb-cover button { font:16px system-ui; padding:10px 20px; cursor:pointer; }
