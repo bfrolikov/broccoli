@@ -15,7 +15,7 @@
   }
   function render() {
     const held = !!current && state !== "allowed";
-    document.documentElement?.classList.toggle("ytb-hold", held);
+    document.documentElement?.classList.toggle("broccoli-hold", held);
     for (const [container, cover] of covers) {
       if (!held || !container.isConnected || !cover.isConnected) {
         cover.remove();
@@ -31,7 +31,7 @@
       let cover = covers.get(container);
       if (!cover) {
         cover = document.createElement("div");
-        cover.className = "ytb-cover";
+        cover.className = "broccoli-cover";
         cover.setAttribute("role", "status");
         container.append(cover);
         covers.set(container, cover);

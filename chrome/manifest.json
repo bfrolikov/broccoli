@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Anti-brainrot Blocker",
+  "name": "broccoli",
   "version": "1.0.0",
   "description": "Block videos based on categories",
   "permissions": [
@@ -16,7 +16,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Anti-brainrot Blocker"
+    "default_title": "broccoli"
   },
   "content_scripts": [
     {

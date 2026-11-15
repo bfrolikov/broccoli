@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
 UUID = "c2d9e36d-d43b-4af7-8778-3145d93d5540"
-ADDON = "youtube-blocker@bfrolikov.github.io"
+ADDON = "broccoli@bfrolikov.github.io"
 state = {"categories": ["math"]}
 
 

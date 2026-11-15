@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Anti-brainrot Blocker",
+  "name": "broccoli",
   "version": "1.0.2",
   "description": "Block videos based on categories",
   "browser_specific_settings": {
     "gecko": {
-      "id": "youtube-blocker@bfrolikov.github.io",
+      "id": "broccoli@bfrolikov.github.io",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": [
@@ -34,7 +34,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Anti-brainrot Blocker"
+    "default_title": "broccoli"
   },
   "content_scripts": [
     {

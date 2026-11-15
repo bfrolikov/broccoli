@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const http = require("node:http");
 (async () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "ytb-chrome-"));
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "broccoli-chrome-"));
   let context, server;
   const launch = (dir) =>
     chromium.launchPersistentContext(
@@ -156,11 +156,11 @@ const http = require("node:http");
     );
     await page.goto("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     await page.waitForFunction(() =>
-      document.documentElement.classList.contains("ytb-hold"),
+      document.documentElement.classList.contains("broccoli-hold"),
     );
     const start = Date.now();
     await page.waitForFunction(
-      () => !document.documentElement.classList.contains("ytb-hold"),
+      () => !document.documentElement.classList.contains("broccoli-hold"),
       {},
       { timeout: 50000 },
     );
