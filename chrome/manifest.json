@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Anti-brainrot Blocker",
+  "version": "1.0.0",
+  "description": "Pause YouTube videos until your server allows them.",
+  "permissions": [
+    "storage",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://api.anti-brainrot-blocker.fyi/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Anti-brainrot Blocker"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "compatibility.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "minimum_chrome_version": "120"
+}
