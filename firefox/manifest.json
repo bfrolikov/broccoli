@@ -3,6 +3,10 @@
   "name": "broccoli",
   "version": "1.0.2",
   "description": "Block videos based on categories",
+  "icons": {
+    "32": "assets/icon-32.png",
+    "64": "assets/icon-64.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "broccoli@bfrolikov.github.io",
@@ -34,7 +38,12 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "broccoli"
+    "default_title": "broccoli",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "64": "assets/icon-64.png"
+    }
   },
   "content_scripts": [
     {

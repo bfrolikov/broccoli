@@ -13,8 +13,8 @@
             font: 14px system-ui;
             width: 300px;
             padding: 16px;
-            background: #171717;
-            color: #fff
+            background: #fff;
+            color: #234b29
         }
 
         label,
@@ -37,7 +37,7 @@
         }
 
         small {
-            color: #ccc
+            color: #52634d
         }
 
         fieldset {
@@ -78,11 +78,51 @@
         input {
             outline-offset: 2px
         }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #2e7d32;
+        }
+
+        .brand img {
+            display: block;
+            flex-shrink: 0;
+        }
+
+        input {
+            background: #fff;
+            color: #234b29;
+            border: 1px solid #91a884;
+            border-radius: 6px;
+        }
+
+        button {
+            background: #eaf2d8;
+            color: #234b29;
+            border: 1px solid #91a884;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #ddebbf;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        :focus-visible {
+            outline: 2px solid #2e7d32;
+        }
     </style>
 </head>
 
 <body>
-    <h2>broccoli</h2>
+    <h2 class="brand"><img src="assets/broccoli.png" width="48" height="48" alt="">broccoli</h2>
     <form id="login"><label>Username<input id="username" autocomplete="username" required></label><label>Password<input
                 id="password" type="password" autocomplete="current-password" required></label><button
             id="login-button">Log in</button></form>
