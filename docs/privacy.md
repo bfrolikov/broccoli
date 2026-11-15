@@ -1,3 +1,7 @@
+---
+title: Privacy Policy for broccoli
+---
+
 # Privacy Policy for broccoli
 
 Last updated: 16 November 2026
