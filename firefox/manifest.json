@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "broccoli",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Block videos based on categories",
   "icons": {
     "32": "assets/icon-32.png",
