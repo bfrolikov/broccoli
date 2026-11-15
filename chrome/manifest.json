@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anti-brainrot Blocker",
   "version": "1.0.0",
-  "description": "Pause YouTube videos until your server allows them.",
+  "description": "Block videos based on categories",
   "permissions": [
     "storage",
     "webNavigation"
