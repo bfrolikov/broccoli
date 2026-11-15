@@ -1,4 +1,4 @@
-# broccoli
+# broccoli 🥦
 
 Расширения для Chrome и Firefox, которые блокируют видео на YouTube по категориям.
 ## Что это и зачем
