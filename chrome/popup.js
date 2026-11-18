@@ -3,6 +3,7 @@ const $ = (id) => document.getElementById(id);
 let epoch = 0,
   draftQueue = Promise.resolve(),
   busy = false,
+  registering = false,
   categoryLoaded = false,
   categoryRevision = 0,
   viewRevision = 0,
@@ -92,7 +93,7 @@ $("new-category").addEventListener("keydown", (e) => {
 });
 function setBusy(value) {
   busy = value;
-  for (const id of ["username", "password", "login-button", "logout"])
+  for (const id of ["username", "password", "login-button", "show-register", "register-email", "register-password", "register-button", "back-to-login", "logout"])
     $(id).disabled = value;
 }
 async function loadCategories() {
@@ -119,9 +120,23 @@ async function loadCategories() {
     }
   }
 }
+function showAuthForm(loggedIn) {
+  $("login").hidden = loggedIn || registering;
+  $("register").hidden = loggedIn || !registering;
+}
+function switchAuthForm(register) {
+  if (busy) return;
+  registering = register;
+  $("register-password").value = "";
+  $("status").textContent = "";
+  showAuthForm(false);
+  $(register ? "register-email" : "username").focus();
+}
+$("show-register").onclick = () => switchAuthForm(true);
+$("back-to-login").onclick = () => switchAuthForm(false);
 async function update() {
   const s = await send({ type: "status" });
-  $("login").hidden = s.loggedIn;
+  showAuthForm(s.loggedIn);
   $("logout").hidden = !s.loggedIn;
   $("category-section").hidden = !s.loggedIn;
   if (!s.loggedIn) {
@@ -160,9 +175,9 @@ async function action(fn) {
   setBusy(true);
   $("status").textContent = "Working…";
   try {
-    await fn();
+    const message = await fn();
     await update();
-    $("status").textContent = "Saved.";
+    $("status").textContent = message ?? "Saved.";
   } catch (e) {
     $("status").textContent = e.message;
     try {
@@ -185,6 +200,28 @@ $("login").onsubmit = (e) => {
     viewRevision++;
     categoryLoaded = false;
     categorySave = null;
+  });
+};
+$("register").onsubmit = (e) => {
+  e.preventDefault();
+  if (busy) return;
+  const email = $("register-email").value.trim(),
+    password = $("register-password").value;
+  if ([...password].length < 8 || new TextEncoder().encode(password).length > 72) {
+    $("status").textContent = "Use at least 8 characters and at most 72 UTF-8 bytes.";
+    return;
+  }
+  return action(async () => {
+    await ready;
+    await draftQueue;
+    const result = await send({ type: "register", email, password });
+    registering = false;
+    $("register-password").value = "";
+    $("register-email").value = "";
+    $("password").value = "";
+    $("username").value = email;
+    await readDraft();
+    return result.signedIn ? "Account created." : "Account created. Please log in.";
   });
 };
 $("logout").onclick = () =>

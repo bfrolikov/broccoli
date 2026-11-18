@@ -155,10 +155,10 @@ for (const target of ["firefox", "chrome"]) {
           true,
         );
       });
-    const send = (msg, inTab = false) =>
+    const send = (msg, inTab = false, content = false) =>
       invoke(msg, {
         id: "test",
-        url: browser.runtime.getURL("popup.html"),
+        url: content ? "https://www.youtube.com/" : browser.runtime.getURL("popup.html"),
         ...(inTab ? { tab: { id: 5 } } : {}),
       });
     const check = (
@@ -565,7 +565,7 @@ for (const target of ["firefox", "chrome"]) {
     popup.type("password", "wrong password");
     b.respond(() => ({status: 401}));
     await popup.submit("login");
-    assert.equal(popup.elements.status.textContent, "Incorrect username or password.");
+    assert.equal(popup.elements.status.textContent, "Incorrect email, username, or password.");
     assert.equal(popup.elements.login.hidden, false);
     assert.equal(popup.elements["login-button"].disabled, false);
     assert.equal(popup.elements.password.value, "wrong password");
@@ -698,6 +698,12 @@ for (const target of ["firefox", "chrome"]) {
       "new-category",
       "add-category",
       "login-button",
+      "register",
+      "show-register",
+      "register-email",
+      "register-password",
+      "register-button",
+      "back-to-login",
     ];
     function element() {
       return {
@@ -713,6 +719,7 @@ for (const target of ["firefox", "chrome"]) {
     const elements = Object.fromEntries(ids.map(id => [id, element()]));
     const context = vm.createContext({
       URL,
+      TextEncoder,
       document: { getElementById: (id) => elements[id], createTextNode: text => ({textContent:text}), createElement: element },
       [target === "chrome" ? "chrome" : "browser"]: {
         runtime: {
@@ -799,6 +806,79 @@ for (const target of ["firefox", "chrome"]) {
       assert.deepEqual((await b.send({ type: "draftGet" })).draft, {});
     },
   );
+  test(target + ": registration signs in with email or returns to email login", async () => {
+    for (const automaticLoginWorks of [true, false]) {
+      const b = background();
+      const popup = popupWithBackground(b);
+      const credentials = { email: "approved@example.com", password: "new password" };
+      const tokens = { access_token: "a", refresh_token: "r", expires_in: 900 };
+      b.respond(url => url.endsWith("/auth/register")
+        ? { status: 200, body: { status: "OK" } }
+        : url.endsWith("/auth/login")
+          ? automaticLoginWorks ? { status: 200, body: tokens } : { status: 401 }
+          : { status: 200, body: { status: "OK", categories: [] } });
+      await popup.settle();
+      await b.send({ type: "register", ...credentials }, true, true);
+      assert.equal(b.calls.length, 0);
+      popup.elements["show-register"].onclick();
+      assert.equal(popup.elements.login.hidden, true);
+      popup.type("register-email", credentials.email);
+      popup.type("register-password", credentials.password);
+      await popup.submit("register");
+      assert.deepEqual(b.calls.slice(0, 2).map(call => [
+        new URL(call.url).pathname, JSON.parse(call.options.body),
+      ]), [["/auth/register", credentials], ["/auth/login", credentials]]);
+      assert.deepEqual(b.session.data.loginDraft, { username: credentials.email, password: "" });
+      assert.equal(popup.elements["register-password"].value, "");
+      assert.equal(popup.elements.register.hidden, true);
+      assert.equal(popup.elements.login.hidden, automaticLoginWorks);
+      if (!automaticLoginWorks) {
+        assert.equal(popup.elements.status.textContent, "Account created. Please log in.");
+        assert.equal(popup.elements.username.value, credentials.email);
+        assert.equal(popup.elements.password.value, "");
+        b.respond(url => url.endsWith("/auth/login")
+          ? { status: 200, body: tokens }
+          : { status: 200, body: { status: "OK", categories: [] } });
+        popup.type("password", credentials.password);
+        await popup.submit("login");
+        assert.deepEqual(JSON.parse(b.calls[2].options.body), credentials);
+      }
+      assert.equal(b.local.data.refreshToken, "r");
+      assert.equal(popup.elements["category-section"].hidden, false);
+    }
+  });
+
+  test(target + ": failed registration stays on the form and never attempts login", async () => {
+    const b = background();
+    const popup = popupWithBackground(b);
+    await popup.settle();
+    popup.elements["show-register"].onclick();
+    popup.type("register-email", "test@example.com");
+    popup.type("register-password", "🦊".repeat(19));
+    await popup.submit("register");
+    assert.match(popup.elements.status.textContent, /72 UTF-8 bytes/);
+    assert.equal(b.calls.length, 0);
+    popup.type("register-password", "new password");
+    for (const [status, message] of [
+      [403, /approve this email/],
+      [409, /already registered/],
+      [400, /valid email/],
+      [429, /Too many registration attempts/],
+    ]) {
+      b.respond(() => ({ status }));
+      await popup.submit("register");
+      assert.match(popup.elements.status.textContent, message);
+      assert.equal(popup.elements.register.hidden, false);
+      assert.equal(popup.elements["register-button"].disabled, false);
+      assert.equal(b.session.data.loginDraft, undefined);
+    }
+    assert.equal(b.calls.length, 4);
+    assert.ok(b.calls.every(call => call.url.endsWith("/auth/register")));
+    popup.elements["back-to-login"].onclick();
+    assert.equal(popup.elements.login.hidden, false);
+    assert.equal(popup.elements["register-password"].value, "");
+  });
+
   test(target + ": category controls autosave, normalize names, and notify tabs", async () => {
     const b = background();
     await b.local.set({ refreshToken: "old" });

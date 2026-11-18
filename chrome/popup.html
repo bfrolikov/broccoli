@@ -123,9 +123,15 @@
 
 <body>
     <h2 class="brand"><img src="assets/broccoli.png" width="48" height="48" alt="">broccoli</h2>
-    <form id="login"><label>Username<input id="username" autocomplete="username" required></label><label>Password<input
+    <form id="login"><label>Email or username<input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label><label>Password<input
                 id="password" type="password" autocomplete="current-password" required></label><button
-            id="login-button">Log in</button></form>
+            id="login-button">Log in</button><button id="show-register" type="button">Create account</button></form>
+    <form id="register" hidden>
+        <label>Email<input id="register-email" type="email" autocomplete="email" maxlength="254" required></label>
+        <label>Password<input id="register-password" type="password" autocomplete="new-password" required></label>
+        <button id="register-button" type="submit">Create account</button>
+        <button id="back-to-login" type="button">Back to login</button>
+    </form>
     <section id="category-section" hidden>
         <form id="category-form">
             <fieldset id="category-editor" disabled>

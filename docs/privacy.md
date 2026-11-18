@@ -10,11 +10,11 @@ This policy covers the broccoli extensions for Chrome and Firefox and the backen
 
 ## Accounts and information we handle
 
-The developer creates random usernames and passwords and gives them directly to users. Account registration and deletion are handled by the developer rather than through a public registration form.
+The developer approves email addresses for registration. Users with an approved address can create an account in the extension. Members sign in with their email address or their existing username. The developer handles account deletion requests.
 
 To provide the service, we handle:
 
-- **Account and authentication information:** your assigned username, password during authentication, internal account ID, authentication tokens, and session records.
+- **Account and authentication information:** your email address or assigned username, password during registration and authentication, internal account ID, authentication tokens, and session records.
 - **Category preferences:** the allowed video categories you enter and save.
 - **YouTube activity:** the IDs of videos checked when you open YouTube watch pages or Shorts, and whether those videos are allowed. These IDs identify videos you access and are associated with your account during processing, caching, and logging.
 - **Video information:** titles, descriptions, channel names, tags, and thumbnail URLs obtained through the YouTube Data API to classify videos.
@@ -29,9 +29,9 @@ We do not sell user data or use it for advertising. Our use and transfer of info
 
 ## Storage and security
 
-The extension temporarily stores login drafts, including the password, in browser session storage so that reopening the popup preserves unfinished input. The password draft is cleared after successful login or logout. Access tokens are stored in session storage; refresh tokens are stored in the extension's persistent local storage to maintain login across browser sessions. These stores are not Chrome or Firefox account sync storage.
+The extension temporarily stores login drafts, including the password, in browser session storage so that reopening the popup preserves unfinished input. The password draft is cleared after successful login or logout. Registration passwords are not saved as drafts. Access tokens are stored in session storage; refresh tokens are stored in the extension's persistent local storage to maintain login across browser sessions. These stores are not Chrome or Firefox account sync storage.
 
-The backend stores usernames, password hashes, category preferences, and authentication session records in PostgreSQL. Passwords are hashed with bcrypt before database storage. Refresh tokens are stored on the server as hashes rather than as the raw tokens issued to the extension. Per-account video decisions are cached in Redis.
+The backend stores approved email addresses, account email addresses or usernames, password hashes, category preferences, and authentication session records in PostgreSQL. Passwords are hashed with bcrypt before database storage. Refresh tokens are stored on the server as hashes rather than as the raw tokens issued to the extension. Per-account video decisions are cached in Redis.
 
 The extensions communicate with the production backend over HTTPS. The backend also uses HTTPS for YouTube and OpenAI API requests.
 
