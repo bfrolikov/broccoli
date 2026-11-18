@@ -74,6 +74,12 @@ async function clearAuth() {
   await extensionAPI.storage.local.remove("refreshToken");
   await notify();
 }
+const registrationErrors = {
+  400: "Enter a valid email and a password of at least 8 characters and at most 72 UTF-8 bytes.",
+  403: "Ask the admin to approve this email before registering.",
+  409: "This email is already registered. Please log in.",
+  429: "Too many registration attempts. Please try again in a minute.",
+};
 async function request(path, body, token) {
   // Finite API calls reset Chrome's worker idle timer while a check is pending.
   const heartbeat = isChromeExtension
@@ -96,9 +102,11 @@ async function request(path, body, token) {
     });
     if (!res.ok) {
       const error = Error(
-        res.status === 401
+        path === "/auth/register"
+          ? registrationErrors[res.status] || "Unable to create an account. Please try again."
+          : res.status === 401
           ? path === "/auth/login"
-            ? "Incorrect username or password."
+            ? "Incorrect email, username, or password."
             : "Your session expired. Please log in again."
           : "Unable to reach the API or check this video.",
       );
@@ -162,12 +170,15 @@ async function logout() {
     }
   }
 }
-async function resetDraft(all) {
+async function resetDraft(all, identifier) {
   const stored = await extensionAPI.storage.session.get([
     "loginDraft",
     "draftEpoch",
   ]);
-  const draft = all ? {} : { ...stored.loginDraft, password: "" };
+  const draft = all ? {} : {
+    username: identifier ?? stored.loginDraft?.username ?? "",
+    password: "",
+  };
   await extensionAPI.storage.session.set({
     loginDraft: draft,
     draftEpoch: (stored.draftEpoch || 0) + 1,
@@ -312,11 +323,29 @@ function handleMessage(msg, sender) {
           loggedIn: !!refreshToken,
         };
       }
+      if (msg.type === "register") {
+        const { refreshToken } = await extensionAPI.storage.local.get("refreshToken");
+        if (refreshToken) throw Error("Log out before creating an account.");
+        const { email, password } = msg;
+        const credentials = { email, password };
+        const registration = await request("/auth/register", credentials);
+        if (registration?.status !== "OK") throw Error("Unable to confirm account creation.");
+        await resetDraft(false, email);
+        try {
+          await saveTokens(await request("/auth/login", credentials));
+        } catch {
+          return { signedIn: false };
+        }
+        await notify();
+        return { signedIn: true };
+      }
       if (msg.type === "login") {
         await clearAuth();
         await saveTokens(
           await request("/auth/login", {
-            username: msg.username,
+            ...(msg.username.includes("@")
+              ? { email: msg.username }
+              : { username: msg.username }),
             password: msg.password,
           }),
         );

@@ -52,17 +52,26 @@ const http = require("node:http");
     let delay = 35000,
       allowed = true,
       categories = ["math"];
+    let registeredEmail;
     server = http.createServer((req, res) => {
       const reply = (data) => {
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(data));
       };
-      if (req.url === "/auth/login") {
+      if (req.url === "/auth/login" || req.url === "/auth/register") {
         let body = "";
         req.on("data", chunk => body += chunk);
         req.on("end", () => {
           const credentials = JSON.parse(body);
-          if (credentials.username !== "user" || credentials.password !== "password") {
+          if (req.url === "/auth/register") {
+            assert.deepEqual(credentials, { email: "approved@example.com", password: "password" });
+            registeredEmail = credentials.email;
+            return reply({ status: "OK" });
+          }
+          const validIdentifier = credentials.email
+            ? credentials.email === registeredEmail
+            : credentials.username === "user";
+          if (!validIdentifier || credentials.password !== "password") {
             res.statusCode = 401;
             return reply({error: "Unauthorized"});
           }
@@ -117,12 +126,12 @@ const http = require("node:http");
     console.log("Username and password survived popup recreation.");
     assert.equal(await restored.locator("#username").inputValue(), "user");
     await restored.locator("#password").fill("wrong password");
-    await restored.locator("#login button").click();
-    await restored.getByText("Incorrect username or password.", {exact: true}).waitFor();
+    await restored.locator("#login-button").click();
+    await restored.getByText("Incorrect email, username, or password.", {exact: true}).waitFor();
     assert.equal(await restored.locator("#password").inputValue(), "wrong password");
     assert.equal(await restored.locator("#login-button").isEnabled(), true);
     await restored.locator("#password").fill("password");
-    await restored.locator("#login button").click();
+    await restored.locator("#login-button").click();
     popup = restored;
     await popup.locator("#logout").waitFor({ state: "visible" });
     await popup.waitForFunction(
@@ -193,6 +202,13 @@ const http = require("node:http");
       .waitFor();
     assert.equal(await page.locator("video").evaluate((v) => v.paused), true);
     console.log("Logout re-covered the player.");
+    await popup.locator("#show-register").click();
+    await popup.locator("#register-email").fill("approved@example.com");
+    await popup.locator("#register-password").fill("password");
+    await popup.locator("#register-button").click();
+    await popup.locator("#logout").waitFor({ state: "visible" });
+    assert.equal(await popup.locator("#register-password").inputValue(), "");
+    console.log("Email registration and automatic sign-in passed.");
   } finally {
     if (context) await context.close();
     if (server) await new Promise((resolve) => server.close(resolve));

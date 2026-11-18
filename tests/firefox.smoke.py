@@ -26,7 +26,14 @@ class API(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-        if self.path == "/categories/":
+        if self.path == "/auth/register":
+            assert body == {"email": "approved@example.com", "password": "password"}
+            state["registered_email"] = body["email"]
+            self.respond({"status": "OK"})
+        elif self.path == "/auth/login" and "email" in body:
+            assert body == {"email": state["registered_email"], "password": "password"}
+            self.respond({"access_token": "test-access", "refresh_token": "test-refresh", "expires_in": 900})
+        elif self.path == "/categories/":
             state["categories"] = body["categories"]
             self.respond({"status": "OK"})
         else:
@@ -129,6 +136,13 @@ def main():
         execute("document.getElementById('logout').click()")
         wait("!document.getElementById('login').hidden")
         assert execute("return document.getElementById('password').value") == ""
+        execute("document.getElementById('show-register').click()")
+        execute("document.getElementById('register-email').value='approved@example.com';"
+                "document.getElementById('register-password').value='password';"
+                "document.getElementById('register-button').click()")
+        wait("!document.getElementById('logout').hidden")
+        assert execute("return document.getElementById('register-password').value") == ""
+        print("Firefox: email registration and automatic sign-in passed.")
         print("Firefox: login draft restoration, password clearing, category read/save, and logout passed.")
     finally:
         if sid:
