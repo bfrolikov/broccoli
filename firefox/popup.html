@@ -47,12 +47,27 @@ fieldset{border:0;padding:0;margin:0}summary{cursor:pointer;padding:8px}#categor
         }
     </style></head><body>
 <h2 class="brand"><img src="assets/broccoli.png" width="48" height="48" alt="">broccoli</h2>
-<form id="login"><label>Email or username<input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button id="login-button">Log in</button><button id="show-register" type="button">Create account</button></form>
+<form id="login"><label>Email or username<input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button id="login-button">Log in</button><button id="show-register" type="button">Create account</button><button id="show-recovery" type="button">Forgot password?</button></form>
     <form id="register" hidden>
         <label>Email<input id="register-email" type="email" autocomplete="email" maxlength="254" required></label>
         <label>Password<input id="register-password" type="password" autocomplete="new-password" required></label>
         <button id="register-button" type="submit">Create account</button>
         <button id="back-to-login" type="button">Back to login</button>
+    </form>
+    <form id="recovery-code" hidden novalidate>
+        <h3>Enter reset code</h3>
+        <label>Email<input id="recovery-email" type="email" autocomplete="email" maxlength="254" required></label>
+        <button id="send-code" type="button">Send code</button>
+        <label>Six-digit reset code<input id="reset-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></label>
+        <button id="check-code" type="submit">Continue</button>
+        <button id="cancel-recovery" type="button">Back to login</button>
+    </form>
+    <form id="recovery-password" hidden novalidate>
+        <h3>Set a new password</h3>
+        <label>New password<input id="new-password" type="password" autocomplete="new-password" required></label>
+        <label>Confirm new password<input id="confirm-password" type="password" autocomplete="new-password" required></label>
+        <button id="reset-password" type="submit">Reset password</button>
+        <button id="cancel-reset" type="button">Back to login</button>
     </form>
 <section id="category-section" hidden><form id="category-form"><fieldset id="category-editor" disabled><legend>Allowed video categories</legend><div id="selected-categories"></div><details id="category-dropdown"><summary>Choose categories</summary><div id="category-options"></div></details><label>Add category<input id="new-category" placeholder="e.g. programming"></label><button id="add-category" type="button">Add category</button><small>Changes save automatically. An empty selection blocks all videos.</small></fieldset></form><p id="category-status" role="status"></p><button id="retry-categories" type="button" hidden>Retry</button></section>
 <button id="logout" hidden>Log out</button><p id="status" role="status"></p>

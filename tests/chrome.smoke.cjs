@@ -116,15 +116,19 @@ const http = require("node:http");
     assert.equal(await popup.locator("#api, #settings").count(), 0);
     await popup.locator("#username").fill("user");
     await popup.locator("#password").fill("password");
+    await popup.waitForFunction(async () => {
+      const { loginDraft } = await chrome.storage.session.get("loginDraft");
+      return loginDraft?.username === "user";
+    });
     // Destroy the popup page: minimizing closes the actual toolbar popup similarly.
     await popup.close();
     const restored = await context.newPage();
     await restored.goto(extensionOrigin + "/popup.html");
     await restored.waitForFunction(
-      () => document.getElementById("password").value === "password",
+      () => document.getElementById("username").value === "user",
     );
-    console.log("Username and password survived popup recreation.");
-    assert.equal(await restored.locator("#username").inputValue(), "user");
+    assert.equal(await restored.locator("#password").inputValue(), "");
+    console.log("Popup restores the username and leaves the password field blank.");
     await restored.locator("#password").fill("wrong password");
     await restored.locator("#login-button").click();
     await restored.getByText("Incorrect email, username, or password.", {exact: true}).waitFor();

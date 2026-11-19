@@ -93,6 +93,7 @@ for (const target of ["firefox", "chrome"]) {
     const timers = new Map();
     let timerID = 0;
     let heartbeats = 0;
+    let now = Math.floor(Date.now() / 1000) * 1000;
     const browser = {
       storage: { local, session },
       runtime: {
@@ -122,6 +123,7 @@ for (const target of ["firefox", "chrome"]) {
       [target === "chrome" ? "chrome" : "browser"]: browser,
       URL,
       AbortSignal,
+      Date: class extends Date { static now() { return now; } },
       console,
       setInterval: (fn, delay) => {
         assert.equal(delay, 20000);
@@ -135,7 +137,9 @@ for (const target of ["firefox", "chrome"]) {
         return {
           ok: r.status < 400,
           status: r.status,
+          headers: new Headers(r.headers),
           json: async () => r.body,
+          text: async () => r.body ?? "",
         };
       },
     };
@@ -176,6 +180,7 @@ for (const target of ["firefox", "chrome"]) {
     return {
       local,
       session,
+      invoke,
       send,
       check,
       calls,
@@ -183,13 +188,14 @@ for (const target of ["firefox", "chrome"]) {
       restrictions,
       heartbeat: () => heartbeats,
       notifications: () => notifications,
+      advanceTime: (ms) => (now += ms),
       respond: (fn) => (responder = fn),
     };
   }
   test(
     target +
       ": " +
-      "login persists only refresh credentials and restores session after restart",
+      "login and token rotation use session storage only",
     async () => {
       const b = background();
       assert.equal(
@@ -197,10 +203,11 @@ for (const target of ["firefox", "chrome"]) {
           .ok,
         true,
       );
-      assert.equal(b.local.data.refreshToken, "refresh");
+      assert.equal(b.local.data.refreshToken, undefined);
       assert.equal(b.local.data.accessToken, undefined);
       assert.equal(b.session.data.accessToken, "access");
-      await b.session.clear();
+      assert.equal(b.session.data.refreshToken, "refresh");
+      b.advanceTime(901000);
       b.respond((url) =>
         url.endsWith("/auth/refresh")
           ? {
@@ -219,7 +226,8 @@ for (const target of ["firefox", "chrome"]) {
         b.calls.filter((c) => c.url.endsWith("/auth/refresh")).length,
         1,
       );
-      assert.equal(b.local.data.refreshToken, "rotated");
+      assert.equal(b.session.data.refreshToken, "rotated");
+      assert.equal(b.local.data.refreshToken, undefined);
       assert.ok(
         b.calls
           .filter((c) => c.url.includes("/videos/"))
@@ -234,15 +242,15 @@ for (const target of ["firefox", "chrome"]) {
     async () => {
       const b = background();
       assert.equal((await b.check()).state, "login");
-      await b.local.set({ refreshToken: "old" });
+      await b.session.set({ refreshToken: "old" });
       b.respond(() => {
         throw Error("offline");
       });
       assert.equal((await b.check()).state, "error");
-      assert.equal(b.local.data.refreshToken, "old");
+      assert.equal(b.session.data.refreshToken, "old");
       b.respond(() => ({ status: 401 }));
       assert.equal((await b.check()).state, "login");
-      assert.equal(b.local.data.refreshToken, undefined);
+      assert.equal(b.session.data.refreshToken, undefined);
     },
   );
   test(target + ": " + "logout clears credentials", async () => {
@@ -252,7 +260,21 @@ for (const target of ["firefox", "chrome"]) {
     assert.equal((await b.send({ type: "logout" })).ok, true);
     assert.deepEqual(b.local.data, {});
     assert.equal(b.session.data.accessToken, undefined);
+    assert.equal(b.session.data.refreshToken, undefined);
+    assert.deepEqual(JSON.parse(b.calls.at(-1).options.body), { refresh_token: "refresh" });
     assert.deepEqual(b.session.data.loginDraft, {});
+  });
+  test(target + ": account operations require a message from the popup", async () => {
+    const b = background();
+    const scheme = target === "chrome" ? "chrome-extension:" : "moz-extension:";
+    for (const sender of [
+      { id: "another-extension", url: `${scheme}//test/popup.html` },
+      { id: "test", url: `${scheme}//test/other.html` },
+      { id: "test", url: "https://www.youtube.com/", tab: { id: 1 } },
+    ]) {
+      assert.equal(await b.invoke({ type: "draftGet" }, sender), undefined);
+      assert.equal(await b.invoke({ type: "logout" }, sender), undefined);
+    }
   });
   test(target + ": " + "old check cannot unlock after logout", async () => {
     const b = background();
@@ -445,6 +467,7 @@ for (const target of ["firefox", "chrome"]) {
         assert.equal(local.data.apiURL, undefined);
         assert.equal(local.data.refreshToken, undefined);
         assert.equal(session.data.accessToken, undefined);
+        assert.equal(session.data.refreshToken, undefined);
         assert.deepEqual((await b.send({ type: "draftGet" })).draft, {});
         assert.equal((await b.send({ type: "draftGet" })).epoch, 4);
         assert.equal(b.calls.length, 0);
@@ -454,7 +477,7 @@ for (const target of ["firefox", "chrome"]) {
 
   test(
     target +
-      ": upgrade retains production sessions and strips legacy draft URLs",
+      ": upgrade moves production tokens to memory and removes saved passwords",
     async () => {
       for (const oldURL of [
         undefined,
@@ -471,7 +494,7 @@ for (const target of ["firefox", "chrome"]) {
           accessToken: "production-access",
           expires: Date.now() + 900000,
           loginDraft: {
-            apiURL: "",
+            ...(oldURL ? { apiURL: "" } : {}),
             username: "user",
             password: "draft-secret",
           },
@@ -479,11 +502,11 @@ for (const target of ["firefox", "chrome"]) {
         const b = background({ local, session });
         assert.equal((await b.send({ type: "status" })).loggedIn, true);
         assert.equal(local.data.apiURL, undefined);
+        assert.equal(local.data.refreshToken, undefined);
         assert.equal(session.data.accessToken, "production-access");
-        assert.deepEqual((await b.send({ type: "draftGet" })).draft, {
-          username: "user",
-          password: "draft-secret",
-        });
+        assert.equal(session.data.refreshToken, "production-refresh");
+        assert.deepEqual(session.data.loginDraft, { username: "user" });
+        assert.deepEqual((await b.send({ type: "draftGet" })).draft, { username: "user" });
         b.respond(() => ({
           status: 200,
           body: { status: "OK", allowed: true },
@@ -623,7 +646,7 @@ for (const target of ["firefox", "chrome"]) {
       assert.equal((await pending).state, "stale");
       assert.equal(b.calls.length, count);
       assert.equal(b.session.data.accessToken, "new-access");
-      assert.equal(b.local.data.refreshToken, "new-refresh");
+      assert.equal(b.session.data.refreshToken, "new-refresh");
     },
   );
 
@@ -704,6 +727,18 @@ for (const target of ["firefox", "chrome"]) {
       "register-password",
       "register-button",
       "back-to-login",
+      "show-recovery",
+      "recovery-code",
+      "recovery-email",
+      "send-code",
+      "reset-code",
+      "check-code",
+      "cancel-recovery",
+      "recovery-password",
+      "new-password",
+      "confirm-password",
+      "reset-password",
+      "cancel-reset",
     ];
     function element() {
       return {
@@ -713,6 +748,7 @@ for (const target of ["firefox", "chrome"]) {
         append(...children) { this.children.push(...children); },
         setAttribute(name, value) { this[name] = value; },
         focus() {},
+        checkValidity() { return /^[^@\s]+@[^@\s]+$/.test(this.value); },
         addEventListener(name, fn) { this.listeners[name] = fn; },
       };
     }
@@ -764,7 +800,7 @@ for (const target of ["firefox", "chrome"]) {
   }
   test(
     target +
-      ": login draft survives popup recreation and failed login but clears after success",
+      ": popup remembers only the login identifier",
     async () => {
       const b = background();
       let popup = popupWithBackground(b);
@@ -773,23 +809,25 @@ for (const target of ["firefox", "chrome"]) {
       popup.type("password", "secret");
       await popup.flush();
       assert.equal(b.local.data.loginDraft, undefined);
+      assert.deepEqual(b.session.data.loginDraft, { username: "user" });
       popup = popupWithBackground(background(b));
       await popup.settle();
-      assert.equal(popup.elements.password.value, "secret");
+      assert.equal(popup.elements.password.value, "");
       assert.equal(popup.elements.username.value, "user");
+      popup.type("password", "discard when switching forms");
+      popup.elements["show-recovery"].onclick();
+      assert.equal(popup.elements.password.value, "");
       const epoch = (await b.send({ type: "draftGet" })).epoch;
+      await b.send({ type: "draftSet", epoch, draft: { username: "user", password: "legacy password" } });
       b.respond(() => ({ status: 401 }));
       await b.send({ type: "login", username: "user", password: "bad" });
-      assert.equal(
-        (await b.send({ type: "draftGet" })).draft.password,
-        "secret",
-      );
+      assert.deepEqual((await b.send({ type: "draftGet" })).draft, { username: "user" });
       b.respond(() => ({
         status: 200,
         body: { access_token: "a", refresh_token: "r", expires_in: 900 },
       }));
       await b.send({ type: "login", username: "user", password: "secret" });
-      assert.equal((await b.send({ type: "draftGet" })).draft.password, "");
+      assert.deepEqual(b.session.data.loginDraft, { username: "user" });
       assert.equal(
         (
           await b.send({
@@ -828,7 +866,7 @@ for (const target of ["firefox", "chrome"]) {
       assert.deepEqual(b.calls.slice(0, 2).map(call => [
         new URL(call.url).pathname, JSON.parse(call.options.body),
       ]), [["/auth/register", credentials], ["/auth/login", credentials]]);
-      assert.deepEqual(b.session.data.loginDraft, { username: credentials.email, password: "" });
+      assert.deepEqual(b.session.data.loginDraft, { username: credentials.email });
       assert.equal(popup.elements["register-password"].value, "");
       assert.equal(popup.elements.register.hidden, true);
       assert.equal(popup.elements.login.hidden, automaticLoginWorks);
@@ -843,7 +881,7 @@ for (const target of ["firefox", "chrome"]) {
         await popup.submit("login");
         assert.deepEqual(JSON.parse(b.calls[2].options.body), credentials);
       }
-      assert.equal(b.local.data.refreshToken, "r");
+      assert.equal(b.session.data.refreshToken, "r");
       assert.equal(popup.elements["category-section"].hidden, false);
     }
   });
@@ -879,9 +917,222 @@ for (const target of ["firefox", "chrome"]) {
     assert.equal(popup.elements["register-password"].value, "");
   });
 
+  test(target + ": recovery validates the emailed code before resetting the password", async () => {
+    const b = background();
+    const email = "user@example.com";
+    const password = "🦊".repeat(18);
+    await b.session.set({ loginDraft: { username: email } });
+    const popup = popupWithBackground(b);
+    await popup.settle();
+    const elements = popup.elements;
+
+    for (const type of ["requestResetCode", "checkResetCode", "resetPassword"])
+      await b.send({ type, email, token: "012345", password }, true, true);
+    elements["show-recovery"].onclick();
+    assert.equal(elements.login.hidden, true);
+    assert.equal(elements["recovery-code"].hidden, false);
+    assert.equal(elements["recovery-password"].hidden, true);
+    assert.equal(elements["recovery-email"].value, email);
+    assert.equal(b.calls.length, 0);
+
+    let respondToSend;
+    b.respond(() => new Promise(resolve => { respondToSend = resolve; }));
+    const sending = elements["send-code"].onclick();
+    await tick();
+    assert.equal(elements["send-code"].disabled, true);
+    await elements["send-code"].onclick();
+    assert.equal(b.calls.length, 1);
+    respondToSend({ status: 204 });
+    await sending;
+    assert.match(elements.status.textContent, /If an account exists/);
+
+    popup.type("reset-code", "12345");
+    await popup.submit("recovery-code");
+    assert.match(elements.status.textContent, /six-digit reset code/);
+    assert.equal(b.calls.length, 1);
+    popup.type("reset-code", "012345");
+    b.respond(() => ({ status: 200, body: { valid: false } }));
+    await popup.submit("recovery-code");
+    assert.match(elements.status.textContent, /invalid or expired/);
+    assert.equal(elements["recovery-password"].hidden, true);
+
+    b.respond(() => ({ status: 200, body: { valid: true } }));
+    await popup.submit("recovery-code");
+    assert.equal(elements["recovery-password"].hidden, false);
+    for (const invalid of ["1234567", "🦊".repeat(19)]) {
+      popup.type("new-password", invalid);
+      popup.type("confirm-password", invalid);
+      await popup.submit("recovery-password");
+      assert.match(elements.status.textContent, /8 characters.*72 UTF-8 bytes/);
+    }
+    popup.type("new-password", password);
+    await popup.submit("recovery-password");
+    assert.match(elements.status.textContent, /passwords do not match/);
+    assert.equal(b.calls.length, 3);
+
+    popup.type("confirm-password", password);
+    b.respond(() => ({ status: 204 }));
+    await popup.submit("recovery-password");
+    assert.deepEqual(b.calls.map(({ url, options }) => {
+      assert.equal(options.method, "POST");
+      assert.equal(options.headers.Authorization, undefined);
+      return [new URL(url).pathname, JSON.parse(options.body)];
+    }), [
+      ["/auth/forgot-password", { email }],
+      ["/auth/check-token", { email, token: "012345" }],
+      ["/auth/check-token", { email, token: "012345" }],
+      ["/auth/reset-password", { email, token: "012345", new_password: password }],
+    ]);
+    for (const id of ["recovery-email", "reset-code", "new-password", "confirm-password", "password"])
+      assert.equal(elements[id].value, "");
+    assert.equal(elements["recovery-password"].hidden, true);
+    assert.equal(elements.login.hidden, false);
+    assert.equal(elements.username.value, email);
+    assert.match(elements.status.textContent, /Password reset/);
+    assert.deepEqual(b.session.data.loginDraft, { username: email });
+    assert.equal(b.session.data.refreshToken, undefined);
+
+    b.respond(url => url.endsWith("/auth/login")
+      ? { status: 200, body: { access_token: "a", refresh_token: "r", expires_in: 900 } }
+      : { status: 200, body: { status: "OK", categories: [] } });
+    popup.type("password", password);
+    await popup.submit("login");
+    assert.deepEqual(JSON.parse(b.calls[4].options.body), { email, password });
+    assert.equal(elements["category-section"].hidden, false);
+  });
+
+  test(target + ": recovery handles request failures, expired codes, and cancellation", async () => {
+    const b = background();
+    const popup = popupWithBackground(b);
+    await popup.settle();
+    const elements = popup.elements;
+    popup.type("username", "legacy-user");
+    elements["show-recovery"].onclick();
+    assert.equal(elements["recovery-email"].value, "");
+    await elements["send-code"].onclick();
+    assert.equal(b.calls.length, 0);
+
+    popup.type("recovery-email", "user@example.com");
+    b.respond(() => ({ status: 429 }));
+    await elements["send-code"].onclick();
+    assert.match(elements.status.textContent, /Too many requests for a reset code/);
+    assert.equal(elements["send-code"].disabled, false);
+
+    popup.type("reset-code", "012345");
+    b.respond(() => ({ status: 200, body: { valid: "true" } }));
+    await popup.submit("recovery-code");
+    assert.match(elements.status.textContent, /Unable to verify/);
+    assert.equal(elements["recovery-password"].hidden, true);
+
+    b.respond(() => ({ status: 200, body: { valid: true } }));
+    await popup.submit("recovery-code");
+    popup.type("new-password", "new password");
+    popup.type("confirm-password", "new password");
+    b.respond(() => { throw Error("offline"); });
+    await popup.submit("recovery-password");
+    assert.match(elements.status.textContent, /temporarily unavailable/);
+    assert.equal(elements["recovery-password"].hidden, false);
+    assert.equal(elements["reset-password"].disabled, false);
+    assert.equal(elements["new-password"].value, "new password");
+
+    b.respond(() => ({ status: 400, body: "Invalid reset token\n" }));
+    await popup.submit("recovery-password");
+    assert.match(elements.status.textContent, /invalid or expired/);
+    assert.equal(elements["recovery-code"].hidden, false);
+    assert.equal(elements["recovery-email"].value, "user@example.com");
+    for (const id of ["reset-code", "new-password", "confirm-password"])
+      assert.equal(elements[id].value, "");
+
+    popup.type("reset-code", "054321");
+    b.respond(() => ({ status: 200, body: { valid: true } }));
+    await popup.submit("recovery-code");
+    popup.type("new-password", "another password");
+
+    const reopened = popupWithBackground(b);
+    await reopened.settle();
+    reopened.elements["show-recovery"].onclick();
+    assert.equal(reopened.elements["recovery-code"].hidden, false);
+    assert.equal(reopened.elements["recovery-password"].hidden, true);
+    assert.equal(reopened.elements["reset-code"].value, "");
+    assert.equal(reopened.elements["new-password"].value, "");
+
+    elements["cancel-reset"].onclick();
+    assert.equal(elements.login.hidden, false);
+    assert.equal(elements["new-password"].value, "");
+    assert.deepEqual(b.session.data.loginDraft, { username: "legacy-user" });
+  });
+
+  test(target + ": recovery reports validation errors and honors Retry-After at each step", async () => {
+    const b = background();
+    const popup = popupWithBackground(b);
+    await popup.settle();
+    const elements = popup.elements;
+    const email = "user@example.com";
+    elements["show-recovery"].onclick();
+    popup.type("recovery-email", "invalid-email");
+    await elements["send-code"].onclick();
+    assert.match(elements.status.textContent, /valid account email/);
+    assert.equal(b.calls.length, 0);
+    popup.type("recovery-email", email);
+    popup.type("reset-code", "012345");
+
+    for (const { submit, invalid, retryAfter, seconds, success, form } of [
+      {
+        submit: () => elements["send-code"].onclick(),
+        invalid: /valid account email/,
+        retryAfter: () => "12",
+        seconds: 12,
+        success: { status: 204 },
+        form: "recovery-code",
+      },
+      {
+        submit: () => popup.submit("recovery-code"),
+        invalid: /email address.*six-digit reset code/,
+        retryAfter: () => new Date(b.advanceTime(0) + 5000).toUTCString(),
+        seconds: 5,
+        success: { status: 200, body: { valid: true } },
+        form: "recovery-code",
+      },
+      {
+        submit: () => popup.submit("recovery-password"),
+        invalid: /8 characters.*72 UTF-8 bytes/,
+        retryAfter: () => undefined,
+        seconds: 60,
+        success: { status: 204 },
+        form: "recovery-password",
+      },
+    ]) {
+      if (form === "recovery-password") {
+        popup.type("new-password", "new password");
+        popup.type("confirm-password", "new password");
+      }
+      b.respond(() => ({ status: 400, body: "Bad Request\n" }));
+      await submit();
+      assert.match(elements.status.textContent, invalid);
+      assert.equal(elements[form].hidden, false);
+
+      const retryHeader = retryAfter();
+      b.respond(() => ({ status: 429, headers: retryHeader ? { "Retry-After": retryHeader } : {} }));
+      await submit();
+      assert.match(elements.status.textContent, new RegExp(`Try again in ${seconds} seconds`));
+      assert.equal(elements[form].hidden, false);
+      const attemptCount = b.calls.length;
+      b.advanceTime((seconds - 1) * 1000);
+      b.respond(() => success);
+      await submit();
+      assert.equal(b.calls.length, attemptCount);
+      assert.match(elements.status.textContent, /Try again in 1 second\./);
+      b.advanceTime(1000);
+      await submit();
+      assert.equal(b.calls.length, attemptCount + 1);
+    }
+    assert.equal(elements.login.hidden, false);
+    assert.match(elements.status.textContent, /Password reset/);
+  });
+
   test(target + ": category controls autosave, normalize names, and notify tabs", async () => {
     const b = background();
-    await b.local.set({ refreshToken: "old" });
+    await b.session.set({ refreshToken: "old" });
     let values = ["math"], writes = 0;
     b.respond((url, options) => {
       if (url.endsWith("/auth/refresh")) return {status: 200, body: {
@@ -927,8 +1178,7 @@ for (const target of ["firefox", "chrome"]) {
   });
   test(target + ": failed autosave preserves selections and retries saving without reloading", async () => {
     const b = background();
-    await b.local.set({ refreshToken: "r" });
-    await b.session.set({ accessToken: "a", expires: Date.now() + 900000 });
+    await b.session.set({ accessToken: "a", refreshToken: "r", expires: Date.now() + 900000 });
     let fail = false, gets = 0, values = ["math"];
     b.respond((url, options) => {
       if (options.method === "POST") {
@@ -954,8 +1204,7 @@ for (const target of ["firefox", "chrome"]) {
   });
   test(target + ": category editing waits for automatic load and failed loads can be retried", async () => {
     const b = background();
-    await b.local.set({ refreshToken: "r" });
-    await b.session.set({ accessToken: "a", expires: Date.now() + 900000 });
+    await b.session.set({ accessToken: "a", refreshToken: "r", expires: Date.now() + 900000 });
     let finish;
     b.respond(() => new Promise(resolve => { finish = resolve; }));
     const popup = popupWithBackground(b);
@@ -978,8 +1227,7 @@ for (const target of ["firefox", "chrome"]) {
   });
   test(target + ": rapid edits serialize and coalesce into the latest autosave", async () => {
     const b = background();
-    await b.local.set({ refreshToken: "r" });
-    await b.session.set({ accessToken: "a", expires: Date.now() + 900000 });
+    await b.session.set({ accessToken: "a", refreshToken: "r", expires: Date.now() + 900000 });
     b.respond(() => ({status: 200, body: {status: "OK", categories: ["math"]}}));
     const popup = popupWithBackground(b);
     await popup.settle();
@@ -1026,8 +1274,7 @@ for (const target of ["firefox", "chrome"]) {
   test(target + ": stale category loads and saves cannot restore a signed-out view", async () => {
     for (const saving of [false, true]) {
       const b = background();
-      await b.local.set({ refreshToken: "r" });
-      await b.session.set({ accessToken: "a", expires: Date.now() + 900000 });
+      await b.session.set({ accessToken: "a", refreshToken: "r", expires: Date.now() + 900000 });
       b.respond(() => ({status: 200, body: {status: "OK", categories: ["math"]}}));
       const popup = popupWithBackground(b);
       await popup.settle();
@@ -1054,7 +1301,7 @@ for (const target of ["firefox", "chrome"]) {
       assert.equal(b.calls.length, calls);
     }
   });
-  test(target + ": storage restrictions and worker restart", async () => {
+  test(target + ": tokens survive a background restart and clear when the browser closes", async () => {
     const b = background();
     await b.send({ type: "login", username: "u", password: "p" });
     assert.equal(b.restrictions.length, target === "chrome" ? 2 : 0);
@@ -1068,20 +1315,9 @@ for (const target of ["firefox", "chrome"]) {
     assert.equal(restarted.calls.length, 1); // access token survives worker suspension
     await b.session.clear();
     const fresh = background(b);
-    fresh.respond((url) =>
-      url.endsWith("/auth/refresh")
-        ? {
-            status: 200,
-            body: {
-              access_token: "restored",
-              refresh_token: "next",
-              expires_in: 900,
-            },
-          }
-        : { status: 200, body: { status: "OK", allowed: false } },
-    );
-    assert.equal((await fresh.check()).state, "blocked");
-    assert.equal(fresh.calls.length, 2);
+    assert.equal((await fresh.send({ type: "status" })).loggedIn, false);
+    assert.equal((await fresh.check()).state, "login");
+    assert.equal(fresh.calls.length, 0);
   });
   test(
     target + ": heartbeat exists only during requests, including errors",

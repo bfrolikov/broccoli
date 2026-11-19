@@ -3,25 +3,28 @@ const $ = (id) => document.getElementById(id);
 let epoch = 0,
   draftQueue = Promise.resolve(),
   busy = false,
-  registering = false,
+  authView = "login",
+  validatedRecovery = null,
   categoryLoaded = false,
   categoryRevision = 0,
   viewRevision = 0,
   categorySave = null;
-const touched = new Set();
+let usernameEdited = false;
+const authForms = ["login", "register", "recovery-code", "recovery-password"];
+const authFocus = {
+  login: "username",
+  register: "register-email",
+  "recovery-code": "recovery-email",
+  "recovery-password": "new-password",
+};
+const invalidCodeMessage = "This code is invalid or expired. Enter another code or request a new one.";
 async function send(message) {
   const result = await extensionAPI.runtime.sendMessage(message);
   if (result?.error) throw Error(result.error);
   return result;
 }
-function snapshot() {
-  return {
-    username: $("username").value,
-    password: $("password").value,
-  };
-}
 function persistDraft() {
-  const draft = snapshot();
+  const draft = { username: $("username").value };
   draftQueue = draftQueue
     .catch(() => {})
     .then(async () => {
@@ -29,15 +32,14 @@ function persistDraft() {
       return send({ type: "draftSet", epoch, draft });
     });
   draftQueue.catch(() => {
-    $("status").textContent = "Unable to preserve login fields.";
+    $("status").textContent = "Unable to remember your email or username.";
   });
   return draftQueue;
 }
-for (const id of ["username", "password"])
-  $(id).addEventListener("input", () => {
-    touched.add(id);
-    persistDraft();
-  });
+$("username").addEventListener("input", () => {
+  usernameEdited = true;
+  persistDraft();
+});
 let options = [],
   selected = [];
 function renderCategories(focusName) {
@@ -93,7 +95,12 @@ $("new-category").addEventListener("keydown", (e) => {
 });
 function setBusy(value) {
   busy = value;
-  for (const id of ["username", "password", "login-button", "show-register", "register-email", "register-password", "register-button", "back-to-login", "logout"])
+  for (const id of [
+    "username", "password", "login-button", "show-register", "show-recovery",
+    "register-email", "register-password", "register-button", "back-to-login",
+    "recovery-email", "send-code", "reset-code", "check-code", "cancel-recovery",
+    "new-password", "confirm-password", "reset-password", "cancel-reset", "logout",
+  ])
     $(id).disabled = value;
 }
 async function loadCategories() {
@@ -121,19 +128,32 @@ async function loadCategories() {
   }
 }
 function showAuthForm(loggedIn) {
-  $("login").hidden = loggedIn || registering;
-  $("register").hidden = loggedIn || !registering;
+  for (const form of authForms) $(form).hidden = loggedIn || authView !== form;
 }
-function switchAuthForm(register) {
+function clearRecovery() {
+  validatedRecovery = null;
+  for (const id of ["recovery-email", "reset-code", "new-password", "confirm-password"])
+    $(id).value = "";
+}
+function switchAuthForm(view) {
   if (busy) return;
-  registering = register;
+  authView = view;
+  $("password").value = "";
   $("register-password").value = "";
+  clearRecovery();
+  if (view === "recovery-code") {
+    const email = $("recovery-email");
+    email.value = $("username").value.trim();
+    if (!email.checkValidity()) email.value = "";
+  }
   $("status").textContent = "";
   showAuthForm(false);
-  $(register ? "register-email" : "username").focus();
+  $(authFocus[view]).focus();
 }
-$("show-register").onclick = () => switchAuthForm(true);
-$("back-to-login").onclick = () => switchAuthForm(false);
+$("show-register").onclick = () => switchAuthForm("register");
+$("show-recovery").onclick = () => switchAuthForm("recovery-code");
+for (const id of ["back-to-login", "cancel-recovery", "cancel-reset"])
+  $(id).onclick = () => switchAuthForm("login");
 async function update() {
   const s = await send({ type: "status" });
   showAuthForm(s.loggedIn);
@@ -160,11 +180,7 @@ async function readDraft() {
 }
 const ready = (async () => {
   const draft = await readDraft();
-  for (const [id, value] of [
-    ["username", draft.username || ""],
-    ["password", draft.password || ""],
-  ])
-    if (!touched.has(id)) $(id).value = value;
+  if (!usernameEdited) $("username").value = draft.username || "";
   await update();
 })();
 ready.catch((e) => {
@@ -172,6 +188,7 @@ ready.catch((e) => {
 });
 async function action(fn) {
   if (busy) return;
+  const previousView = authView;
   setBusy(true);
   $("status").textContent = "Working…";
   try {
@@ -185,6 +202,7 @@ async function action(fn) {
     } catch {}
   } finally {
     setBusy(false);
+    if (authView !== previousView && !$(authView).hidden) $(authFocus[authView]).focus();
   }
 }
 $("login").onsubmit = (e) => {
@@ -202,26 +220,100 @@ $("login").onsubmit = (e) => {
     categorySave = null;
   });
 };
+function validateNewPassword(password) {
+  if ([...password].length >= 8 && new TextEncoder().encode(password).length <= 72)
+    return true;
+  $("status").textContent = "Use at least 8 characters and at most 72 UTF-8 bytes.";
+  return false;
+}
 $("register").onsubmit = (e) => {
   e.preventDefault();
   if (busy) return;
   const email = $("register-email").value.trim(),
     password = $("register-password").value;
-  if ([...password].length < 8 || new TextEncoder().encode(password).length > 72) {
-    $("status").textContent = "Use at least 8 characters and at most 72 UTF-8 bytes.";
-    return;
-  }
+  if (!validateNewPassword(password)) return;
   return action(async () => {
     await ready;
     await draftQueue;
     const result = await send({ type: "register", email, password });
-    registering = false;
+    authView = "login";
     $("register-password").value = "";
     $("register-email").value = "";
     $("password").value = "";
     $("username").value = email;
     await readDraft();
     return result.signedIn ? "Account created." : "Account created. Please log in.";
+  });
+};
+function recoveryEmail() {
+  const input = $("recovery-email");
+  input.value = input.value.trim();
+  if (!input.checkValidity() || new TextEncoder().encode(input.value).length > 254) {
+    $("status").textContent = "Enter a valid account email address.";
+    input.focus();
+    return "";
+  }
+  return input.value;
+}
+$("send-code").onclick = () => {
+  if (busy || authView !== "recovery-code") return;
+  const email = recoveryEmail();
+  if (!email) return;
+  return action(async () => {
+    await ready;
+    await send({ type: "requestResetCode", email });
+    return "If an account exists for this email, a reset code will be sent.";
+  });
+};
+$("recovery-code").onsubmit = (e) => {
+  e.preventDefault();
+  if (busy || authView !== "recovery-code") return;
+  const email = recoveryEmail();
+  if (!email) return;
+  const token = $("reset-code").value;
+  if (!/^[0-9]{6}$/.test(token)) {
+    $("status").textContent = "Enter the six-digit reset code.";
+    $("reset-code").focus();
+    return;
+  }
+  return action(async () => {
+    await ready;
+    const { valid } = await send({ type: "checkResetCode", email, token });
+    if (!valid) return invalidCodeMessage;
+    validatedRecovery = { email, token };
+    $("reset-code").value = "";
+    authView = "recovery-password";
+    return "";
+  });
+};
+$("recovery-password").onsubmit = (e) => {
+  e.preventDefault();
+  if (busy || authView !== "recovery-password" || !validatedRecovery) return;
+  const password = $("new-password").value;
+  if (!validateNewPassword(password)) {
+    $("new-password").focus();
+    return;
+  }
+  if (password !== $("confirm-password").value) {
+    $("status").textContent = "The passwords do not match.";
+    $("confirm-password").focus();
+    return;
+  }
+  const { email, token } = validatedRecovery;
+  return action(async () => {
+    await draftQueue.catch(() => {});
+    const result = await send({ type: "resetPassword", email, token, password });
+    clearRecovery();
+    if (result.invalidCode) {
+      $("recovery-email").value = email;
+      authView = "recovery-code";
+      return invalidCodeMessage;
+    }
+    authView = "login";
+    $("username").value = email;
+    $("password").value = "";
+    await readDraft();
+    return "Password reset. Log in with your new password.";
   });
 };
 $("logout").onclick = () =>
@@ -236,7 +328,7 @@ $("logout").onclick = () =>
     } finally {
       const draft = await readDraft();
       $("username").value = draft.username || "";
-      $("password").value = draft.password || "";
+      $("password").value = "";
     }
   });
 function saveCategories() {
