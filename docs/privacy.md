@@ -4,64 +4,64 @@ title: Privacy Policy for broccoli
 
 # Privacy Policy for broccoli
 
-Last updated: 16 November 2026
+Last updated 19 November 2026
 
-This policy covers the broccoli extensions for Chrome and Firefox and the backend at `api.anti-brainrot-blocker.fyi`. broccoli checks YouTube videos against your allowed categories and blocks videos that do not match. The developer operates the service and can be contacted at [b.frolikov@gmail.com](mailto:b.frolikov@gmail.com).
+This policy covers the broccoli extensions for Chrome and Firefox and the backend at `api.anti-brainrot-blocker.fyi`. broccoli checks YouTube videos against your allowed categories and blocks videos that do not match.
 
 ## Accounts and information we handle
 
-The developer approves email addresses for registration. Users with an approved address can create an account in the extension. Members sign in with their email address or their existing username. The developer handles account deletion requests.
+The developer approves email addresses for registration. Users with an approved address can create an account in the extension. Members sign in with their broccoli account email address or their existing username.
 
-To provide the service, we handle:
-
-- **Account and authentication information:** your email address or assigned username, password during registration and authentication, internal account ID, authentication tokens, and session records.
-- **Category preferences:** the allowed video categories you enter and save.
-- **YouTube activity:** the IDs of videos checked when you open YouTube watch pages or Shorts, and whether those videos are allowed. These IDs identify videos you access and are associated with your account during processing, caching, and logging.
-- **Video information:** titles, descriptions, channel names, tags, and thumbnail URLs obtained through the YouTube Data API to classify videos.
-- **Operational information:** request and error logs, which can include account IDs, video IDs, request paths, timestamps, response status, and other technical request details. The server also processes connection information, including IP addresses, to receive requests and limit abuse.
-- **Correspondence:** your email address and information you provide when contacting the developer for support or privacy requests.
+- **Account and authentication information.** We process your email address or username, your password when you register or sign in, your internal account ID, authentication tokens, and session records. If you use email-based password recovery, the backend processes the email address you submit, the six-digit code you enter, and the new password you choose.
+- **Category preferences.** We store the allowed video categories you save in the extension.
+- **YouTube activity.** When you open a watch page or Short on `www.youtube.com`, the extension reads the video ID from the page URL on your device. If you are signed in, it sends that ID and your broccoli access token to the backend. A check can happen before a video plays. The backend associates the video ID and the decision with your account.
+- **Operational information.** Request and error logs can include IP addresses, browser information, request URLs, timestamps, response status, account and video IDs, cached decisions, and delivery IDs for password reset emails. The backend uses IP addresses and submitted sign-in or recovery identifiers to limit repeated requests.
+- **Correspondence.** The developer receives your email address and the information you provide when you contact them for support or privacy requests.
 
 ## How we use information
 
-We use information to authenticate users, maintain login sessions, save category preferences, classify videos, enforce blocking rules, cache decisions, troubleshoot failures, secure the service, and respond to requests.
+We use information to authenticate users, recover access to accounts, save category preferences, check and block videos, cache decisions, troubleshoot failures, secure the service, and respond to requests.
 
-We do not sell user data or use it for advertising. Our use and transfer of information received through broccoli complies with the Chrome Web Store User Data Policy, including its Limited Use requirements.
+We do not sell user data or use it for advertising. Our use and transfer of information received through the Chrome extension follows the Chrome Web Store User Data Policy, including its [Limited Use requirements](https://developer.chrome.com/docs/webstore/program-policies/limited-use).
 
 ## Storage and security
 
-The extension temporarily stores login drafts, including the password, in browser session storage so that reopening the popup preserves unfinished input. The password draft is cleared after successful login or logout. Registration passwords are not saved as drafts. Access tokens are stored in session storage; refresh tokens are stored in the extension's persistent local storage to maintain login across browser sessions. These stores are not Chrome or Firefox account sync storage.
+The extension saves the email address or username you enter in temporary browser session storage so it can restore it when you reopen the popup. The popup holds passwords and recovery codes in memory while you use the forms. Signing out clears the saved email address or username.
 
-The backend stores approved email addresses, account email addresses or usernames, password hashes, category preferences, and authentication session records in PostgreSQL. Passwords are hashed with bcrypt before database storage. Refresh tokens are stored on the server as hashes rather than as the raw tokens issued to the extension. Per-account video decisions are cached in Redis.
+The extension keeps both access and refresh tokens in temporary browser session storage. They keep you signed in while the browser is open. Signing out or closing the browser clears them. The extension also clears them if the server rejects a refresh token as invalid or expired. When updating from an older version, the extension removes saved password drafts and moves any saved production refresh token into session storage.
 
-The extensions communicate with the production backend over HTTPS. The backend also uses HTTPS for YouTube and OpenAI API requests.
+The backend stores approved email addresses, account records, saved categories, authentication sessions, and password reset records in PostgreSQL. It stores passwords as bcrypt hashes, refresh tokens as hashes, and reset codes as keyed hashes linked to your account and an expiry time. Redis stores video IDs and decisions by account.
+
+The extensions communicate with the production backend over HTTPS. The backend uses HTTPS to communicate with its API providers.
 
 ## Service providers and data sharing
 
-We use the following providers to operate broccoli:
+When the backend needs a fresh decision and you have saved allowed categories, it uses YouTube API Services to look up the video and the OpenAI API to classify it.
 
-- **DigitalOcean:** hosts the backend and its databases, caches, and operational logs. See [DigitalOcean's privacy policy](https://www.digitalocean.com/legal/privacy-policy).
-- **Google / YouTube Data API:** receives video IDs from the backend so it can retrieve video metadata for classification. These requests use the service's API credentials. See [Google's privacy policy](https://policies.google.com/privacy).
-- **OpenAI API:** receives the video's title, description, channel name, tags, thumbnail URL when available, and your allowed categories to determine whether a video matches those categories. broccoli does not include your account username, password, account ID, or authentication tokens in these classification requests. Category text is sent as entered, so avoid putting private information in category names. OpenAI's processing of API data is governed by its business agreements and data controls; see [OpenAI's business data privacy information](https://openai.com/business-data/).
+- **DigitalOcean** hosts the backend, its databases and cache, and its operational logs. [DigitalOcean Privacy Policy](https://www.digitalocean.com/legal/privacy-policy)
+- **Google / YouTube Data API** receives the video ID from the backend and returns video metadata. The backend looks up video metadata using broccoli's own API key. [Google Privacy Policy](https://policies.google.com/privacy) · [YouTube Terms of Service](https://www.youtube.com/t/terms)
+- **OpenAI API** receives the video's title, description, channel name, tags, and thumbnail URL when available, along with the category text you saved. OpenAI uses these inputs to determine whether the video matches your categories. Keep private information out of your category names. [OpenAI Business Data Privacy](https://openai.com/business-data/)
+- **Resend** receives the account email address and the one-time code when broccoli sends a password reset email. It uses them to deliver the email. [Resend Privacy Policy](https://resend.com/legal/privacy-policy)
 
-These providers process information as needed to deliver their services. Their handling of information is subject to the applicable provider terms and agreements. This policy does not promise a particular provider retention period or data-control setting that has not been verified for this service.
+Each provider handles the information it receives under its applicable terms and data practices.
 
 ## Retention
 
-- **Account records and categories:** retained while the account remains active, until the developer deletes the account in response to a request.
-- **Browser data:** session storage is temporary. The extension removes local authentication tokens on logout. A refresh token can remain in persistent extension storage until logout, removal of the extension, or clearing its data.
-- **Authentication sessions:** access tokens expire after 15 minutes. Refresh sessions expire after 30 days without renewal; refreshing extends the session. Logout revokes the refresh session. Expiration or revocation does not itself immediately delete stored session records; expired records are cleaned up when new sessions are created. Account deletion removes associated database session records.
-- **Cached video decisions:** expire 1440 hours after being written. A later check can create a new cache entry. Updating your allowed categories clears the existing decision cache for your account.
-- **Operational logs:** stored on disk and rotated by size. The deployment configuration retains up to three log files of 10 MB each per service, replacing older files as new logs accumulate. There is no fixed time-based retention period, so logs may remain longer than cached decisions.
-- **Database backups:** currently disabled.
-- **Support correspondence:** retained as needed to respond to and follow up on your request; no fixed automatic deletion period is configured.
+- **Account records and categories.** We keep these until the account is deleted. An approved email address stays on the separate registration list until the developer removes it.
+- **Authentication sessions.** Access tokens expire 15 minutes after issuance. Refresh sessions expire 30 days after sign-in, even if the refresh token is renewed. The server cleans up expired records when it creates new sessions. A successful server-side sign-out deletes the corresponding refresh session. A password reset deletes all refresh sessions for the account. Previously issued access tokens can remain valid until they expire.
+- **Password reset codes.** A code expires 15 minutes after it is created and can be used once to reset your password. A successful reset deletes the stored code hash. If a code expires unused, its record can remain until a replacement is created or the account is deleted.
+- **Cached video decisions.** By default, a cached decision expires 60 days after it is written. Saving changes to your allowed categories clears the decision cache for your account. A later check can create a new entry.
+- **Operational logs.** The deployment configuration keeps up to three log files of 10 MB each per service and replaces older files as new logs accumulate. Retention depends on log volume, so logs may remain longer than cached decisions.
+- **Database backups.** The standard deployment stores the database on persistent disk without scheduled database backups.
+- **Support correspondence.** The developer keeps correspondence as needed to respond to and follow up on your request.
 
 ## Your controls and deletion requests
 
-You can change your allowed categories in the extension, sign out, or uninstall it to stop its operation. Uninstalling the extension does not delete your server-side account or data.
+You can change your allowed categories in the extension. Sign out or uninstall the extension to stop it from sending video checks. To remove your server-side account or data, send a deletion request to the developer.
 
-To request access to, correction of, or deletion of your account and associated data, email [b.frolikov@gmail.com](mailto:b.frolikov@gmail.com). The developer handles these requests manually and may ask for information needed to verify account ownership. Do not email your password or authentication tokens.
+The developer handles requests to access, correct, or delete your data manually and may ask for information to verify account ownership. Keep your password, reset codes, and authentication tokens private. Send privacy requests by email to [b.frolikov@gmail.com](mailto:b.frolikov@gmail.com).
 
-Account deletion removes the account, password hash, saved categories, and associated database authentication sessions. Cached decisions and existing operational logs have separate retention as described above; deleting an account does not automatically erase those logs or the Redis cache. You can ask the developer to address remaining associated data as part of your deletion request. Information already processed by service providers is also subject to their applicable retention and deletion practices.
+Account deletion removes the account, password hash, saved categories, authentication sessions, and password reset records from the database. The registration approval list, cached decisions, and existing logs follow the retention described above. You can ask the developer to remove your approved email address and address any remaining cache or log entries in the same request. Information already sent to service providers is subject to their retention and deletion practices.
 
 ## Changes to this policy
 
@@ -69,4 +69,4 @@ We will update this page and its last-updated date when our data practices chang
 
 ## Contact
 
-For privacy questions, account registration, or account/data deletion, contact the developer at [b.frolikov@gmail.com](mailto:b.frolikov@gmail.com).
+The developer operates broccoli. For privacy questions, account registration, or deletion requests, contact [b.frolikov@gmail.com](mailto:b.frolikov@gmail.com).

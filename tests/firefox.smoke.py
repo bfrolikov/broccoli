@@ -104,8 +104,9 @@ def main():
         time.sleep(0.2)
         call("/session/" + sid + "/url", {"url": "about:blank"})
         call("/session/" + sid + "/url", {"url": popup})
-        wait("document.getElementById('password').value === 'password'")
-        assert execute("return document.getElementById('username').value") == "user"
+        wait("document.getElementById('username').value === 'user'")
+        assert execute("return document.getElementById('password').value") == ""
+        execute("document.getElementById('password').value='password'")
         element = call("/session/" + sid + "/element", {"using": "css selector", "value": "#login-button"})
         call("/session/" + sid + "/element/" + next(iter(element.values())) + "/click", {})
         wait("!document.getElementById('category-section').hidden && !document.getElementById('category-editor').disabled")
