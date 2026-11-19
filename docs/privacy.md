@@ -15,7 +15,7 @@ The developer approves email addresses for registration. Users with an approved 
 - **Account and authentication information.** We process your email address or username, your password when you register or sign in, your internal account ID, authentication tokens, and session records. If you use email-based password recovery, the backend processes the email address you submit, the six-digit code you enter, and the new password you choose.
 - **Category preferences.** We store the allowed video categories you save in the extension.
 - **YouTube activity.** When you open a watch page or Short on `www.youtube.com`, the extension reads the video ID from the page URL on your device. If you are signed in, it sends that ID and your broccoli access token to the backend. A check can happen before a video plays. The backend associates the video ID and the decision with your account.
-- **Operational information.** Request and error logs can include IP addresses, browser information, request URLs, timestamps, response status, account and video IDs, cached decisions, and delivery IDs for password reset emails. The backend uses IP addresses and submitted sign-in or recovery identifiers to limit repeated requests.
+- **Operational information.** Request and error logs can include IP addresses, browser information, request URLs, timestamps, response status, account and video IDs, cached decisions, and delivery IDs for password reset emails. The backend keeps short-lived request counts in memory by IP address and by the identifier you submit for sign-in or recovery. It limits sign-in to five attempts per minute per username or email address, treating different capitalizations of an email address as the same address.
 - **Correspondence.** The developer receives your email address and the information you provide when you contact them for support or privacy requests.
 
 ## How we use information
@@ -30,7 +30,7 @@ The extension saves the email address or username you enter in temporary browser
 
 The extension keeps both access and refresh tokens in temporary browser session storage. They keep you signed in while the browser is open. Signing out or closing the browser clears them. The extension also clears them if the server rejects a refresh token as invalid or expired. When updating from an older version, the extension removes saved password drafts and moves any saved production refresh token into session storage.
 
-The backend stores approved email addresses, account records, saved categories, authentication sessions, and password reset records in PostgreSQL. It stores passwords as bcrypt hashes, refresh tokens as hashes, and reset codes as keyed hashes linked to your account and an expiry time. Redis stores video IDs and decisions by account.
+The backend stores approved email addresses, account records, saved categories, authentication sessions, and password reset records in PostgreSQL. It stores passwords as bcrypt hashes and refresh tokens as hashes. Each reset record contains your account ID, a keyed hash of the code, its expiry time, and the number of attempts remaining. Redis stores video IDs and decisions by account.
 
 The extensions communicate with the production backend over HTTPS. The backend uses HTTPS to communicate with its API providers.
 
@@ -49,7 +49,7 @@ Each provider handles the information it receives under its applicable terms and
 
 - **Account records and categories.** We keep these until the account is deleted. An approved email address stays on the separate registration list until the developer removes it.
 - **Authentication sessions.** Access tokens expire 15 minutes after issuance. Refresh sessions expire 30 days after sign-in, even if the refresh token is renewed. The server cleans up expired records when it creates new sessions. A successful server-side sign-out deletes the corresponding refresh session. A password reset deletes all refresh sessions for the account. Previously issued access tokens can remain valid until they expire.
-- **Password reset codes.** A code expires 15 minutes after it is created and can be used once to reset your password. A successful reset deletes the stored code hash. If a code expires unused, its record can remain until a replacement is created or the account is deleted.
+- **Password reset codes.** A code expires 15 minutes after it is created and can be used once to reset your password. Five incorrect entries disable it sooner, whether you enter them while checking the code or submitting a new password. A successful reset deletes the stored code hash and attempt count. An unused code's record can remain until a replacement is created or the account is deleted.
 - **Cached video decisions.** By default, a cached decision expires 60 days after it is written. Saving changes to your allowed categories clears the decision cache for your account. A later check can create a new entry.
 - **Operational logs.** The deployment configuration keeps up to three log files of 10 MB each per service and replaces older files as new logs accumulate. Retention depends on log volume, so logs may remain longer than cached decisions.
 - **Database backups.** The standard deployment stores the database on persistent disk without scheduled database backups.
